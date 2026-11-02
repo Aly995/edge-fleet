@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  author: bayanatk.com
+  description: SX127x LoRa radio stack (pyLoRa + rpi-lgpio) with a verified pin map
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+dependencies: []

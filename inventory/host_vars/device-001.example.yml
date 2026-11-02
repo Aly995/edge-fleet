@@ -1,0 +1,23 @@
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# Per-UNIT values for one physical device. Copy to:
+#   inventory/host_vars/device-001/main.yml       (this file)
+#   inventory/host_vars/device-001/vault.yml      (device-001.vault.example.yml)
+# then encrypt the vault file. Only what differs from the profile goes here.
+# Every value is checked by the preflight role before anything is changed.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Identity — unique per unit; preflight fails if two devices share either value.
+edge_device_id: device-001
+edge_device_secret: "{{ vault_device_secret }}"
+
+# The hostname the device itself reports. preflight compares it live, so a stale
+# ansible_host (DHCP moved the address to another machine) can never be deployed to.
+edge_hostname: device-001
+
+# This unit's board. GPIO4/5 are UART2 on a Pi 5 but UART3 on a Pi 4 — the
+# right overlay and /dev/ttyAMA* node are derived from this one value.
+edge_board: pi5
+
+# This unit has two USB cameras.
+edge_camera_indices: [0, 2]

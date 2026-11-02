@@ -1,0 +1,76 @@
+# {{ ansible_managed }}
+# Rendered per device by Ansible. Do not edit on the device — change the
+# inventory and re-run `deploy.yml --tags config`.
+#
+# Single source of truth for the agent: every path, pin, ID and tunable lives
+# here, read attribute-style (DEVICE.ID, SERIAL.PORT, …).
+from pathlib import Path
+from types import SimpleNamespace
+
+_ROOT = Path("{{ edge_app_root }}")
+
+PATHS = SimpleNamespace(
+    ROOT=_ROOT,
+    LOGS=_ROOT / "logs",
+    MODELS=_ROOT / "models",
+    QUEUE=_ROOT / "data" / "telemetry_queue.json",   # spooled while offline
+)
+
+DEVICE = SimpleNamespace(
+    ID="{{ edge_device_id }}",
+    SECRET="{{ edge_device_secret }}",
+    PROFILE="{{ edge_profile }}",
+    BOARD="{{ edge_board }}",
+)
+
+API = SimpleNamespace(
+    URL="{{ edge_api_url }}",
+    TOKEN="{{ edge_api_token }}",
+    TIMEOUT_S=10,
+)
+
+FEATURES = SimpleNamespace(
+    CAMERAS={{ edge_enable_cameras | bool }},
+    SERIAL_MCU={{ edge_enable_serial_mcu | bool }},
+    ADB_BRIDGE={{ edge_enable_adb_bridge | bool }},
+    LORA={{ edge_enable_lora | bool }},
+    GPS={{ edge_enable_gps | bool }},
+    OLED={{ edge_enable_oled | bool }},
+)
+
+SERIAL = SimpleNamespace(
+    PORT="{{ edge_serial_mcu_port }}",
+    BAUD={{ edge_serial_mcu_baud }},
+    ADC_BITS={{ edge_serial_mcu_adc_bits }},
+)
+
+GPS = SimpleNamespace(
+    PORT="{{ edge_gps_port }}",
+    BAUD={{ edge_gps_baud }},
+    TIMEOUT_S=210,          # a cold start takes minutes; a shorter timeout never fixes
+)
+
+LORA = SimpleNamespace(
+    FREQUENCY_MHZ=868.0,
+    RST_PIN={{ edge_lora_rst_pin }},
+)
+
+OLED = SimpleNamespace(
+    I2C_PORT=1,
+    ADDRESS={{ edge_oled_i2c_address }},
+)
+
+BUTTON = SimpleNamespace(
+    PIN={{ edge_button_pin }},
+)
+
+CAMERA = SimpleNamespace(
+    FALLBACK_INDICES={{ edge_camera_indices | list }},
+    MAPPING_FILE=_ROOT / "camera_mapping.json",     # udev ID_PATH per camera
+)
+
+ADB = SimpleNamespace(
+    UNLOCK_SWIPE={{ edge_adb_unlock_swipe | list }},
+    COMMAND_TIMEOUT_S=10,
+    DUMP_TIMEOUT_S=30,
+)

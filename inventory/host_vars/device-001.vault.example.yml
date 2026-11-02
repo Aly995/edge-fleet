@@ -1,0 +1,4 @@
+---
+# Per-unit secret. Copy to inventory/host_vars/device-001/vault.yml, then:
+#   ansible-vault encrypt inventory/host_vars/device-001/vault.yml
+vault_device_secret: "CHANGE_ME_UNIQUE_PER_DEVICE"

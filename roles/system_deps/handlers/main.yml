@@ -1,0 +1,6 @@
+---
+- name: Reboot device
+  ansible.builtin.reboot:
+    reboot_timeout: 600
+    msg: "Reboot to apply boot-config / interface / group changes"
+  become: true

@@ -1,0 +1,9 @@
+---
+# USB cameras + ADB bridge to an Android device. No serial MCU.
+edge_profile: bridge
+edge_enable_cameras: true
+edge_enable_serial_mcu: false
+edge_enable_adb_bridge: true
+edge_enable_lora: true
+edge_enable_gps: true
+edge_enable_oled: true

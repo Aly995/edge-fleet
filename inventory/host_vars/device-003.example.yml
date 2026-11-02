@@ -1,0 +1,10 @@
+---
+# Example of a unit that differs from its profile: same model as its siblings,
+# but built on a Raspberry Pi 4 and with a different MCU because of supply.
+edge_device_id: device-003
+edge_device_secret: "{{ vault_device_secret }}"
+edge_hostname: device-003
+
+edge_board: pi4                   # → uart3 overlay, /dev/ttyAMA3
+edge_serial_mcu_adc_bits: 10      # ESP8266 firmware (10-bit ADC) instead of ESP32
+edge_button_pin: 16               # GPIO19 failed on this unit; moved to GPIO16

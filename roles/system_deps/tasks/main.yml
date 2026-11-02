@@ -1,0 +1,126 @@
+---
+# system_deps — OS packages, buses, UART overlays and the Python stack for a
+# Raspberry Pi edge device. Idempotent; safe to re-run.
+#
+# pip installs as the LOGIN USER (--user, --break-system-packages) so packages
+# land in the same ~/.local the service runs with. Root-only steps use become.
+
+- name: Apt — update cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+  tags: [packages]
+
+- name: Apt — full upgrade (opt-in)
+  ansible.builtin.apt:
+    upgrade: dist
+  become: true
+  when: system_deps_full_upgrade | bool
+  tags: [packages]
+
+- name: Apt — install system packages
+  ansible.builtin.apt:
+    name: "{{ system_deps_apt_packages }}"
+    state: present
+  become: true
+  tags: [packages]
+
+# ── Buses ────────────────────────────────────────────────────────────────────
+- name: Read I2C / SPI state
+  ansible.builtin.command: "raspi-config nonint get_{{ item }}"
+  loop: [i2c, spi]
+  register: system_deps_bus_state
+  changed_when: false
+  become: true
+  tags: [boot]
+
+- name: Enable I2C / SPI
+  ansible.builtin.command: "raspi-config nonint do_{{ item.item }} 0"
+  loop: "{{ system_deps_bus_state.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.stdout | trim != "0"
+  changed_when: true
+  become: true
+  notify: Reboot device
+  tags: [boot]
+
+# ── UART overlays ────────────────────────────────────────────────────────────
+- name: Boot config — required overlays present
+  ansible.builtin.lineinfile:
+    path: "{{ system_deps_boot_config }}"
+    line: "{{ item }}"
+    state: present
+  loop:
+    - dtoverlay=disable-bt                 # frees UART0 for the GPS module
+    - dtparam=uart0=on
+    - dtparam=i2c_arm=on
+    - "dtoverlay={{ edge_serial_mcu_overlay }}"
+  become: true
+  notify: Reboot device
+  tags: [boot]
+
+# A unit rebuilt on another board would otherwise keep BOTH overlays.
+- name: Boot config — remove the serial-MCU overlay for the other board
+  ansible.builtin.lineinfile:
+    path: "{{ system_deps_boot_config }}"
+    line: "dtoverlay={{ item }}"
+    state: absent
+  loop: >-
+    {{ edge_board_profiles.values() | map(attribute='serial_mcu_overlay')
+       | reject('equalto', edge_serial_mcu_overlay) | list }}
+  become: true
+  notify: Reboot device
+  tags: [boot]
+
+- name: Kernel cmdline — remove the serial console (frees ttyAMA0 for GPS)
+  ansible.builtin.replace:
+    path: "{{ system_deps_boot_cmdline }}"
+    regexp: '\s*console=serial0,115200'
+    replace: ''
+  become: true
+  notify: Reboot device
+  tags: [boot]
+
+- name: Login user can use USB/ADB devices without root (plugdev)
+  ansible.builtin.user:
+    name: "{{ edge_app_user }}"
+    groups: [plugdev, dialout, gpio, i2c, spi]
+    append: true
+  become: true
+  notify: Reboot device
+  tags: [boot]
+
+# ── Python stack ─────────────────────────────────────────────────────────────
+# /tmp is RAM-backed on Pi OS and runs out while unpacking the torch wheel.
+- name: Pip — on-disk scratch dir
+  ansible.builtin.file:
+    path: "/home/{{ edge_app_user }}/.cache/pip_tmp"
+    state: directory
+    mode: "0755"
+  tags: [python]
+
+- name: Pip — pinned ML wheels (installed first)
+  ansible.builtin.pip:
+    name: "{{ system_deps_pip_pinned }}"
+    executable: pip3
+    extra_args: --user --break-system-packages
+  environment:
+    TMPDIR: "/home/{{ edge_app_user }}/.cache/pip_tmp"
+  tags: [python]
+
+- name: Pip — application packages
+  ansible.builtin.pip:
+    name: "{{ system_deps_pip_packages }}"
+    executable: pip3
+    extra_args: --user --break-system-packages
+  environment:
+    TMPDIR: "/home/{{ edge_app_user }}/.cache/pip_tmp"
+  tags: [python]
+
+- name: Pip — smoke-test the ML stack runs on this CPU
+  ansible.builtin.command:
+    cmd: python3 -c "import torch; (torch.rand(256, 256) @ torch.rand(256, 256)).sum()"
+  changed_when: false
+  tags: [python]

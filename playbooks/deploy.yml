@@ -1,0 +1,13 @@
+---
+# Roll the agent out in batches. Default is one device at a time; for a large
+# fleet pass a percentage, e.g. -e batch=10%.
+#   ansible-playbook playbooks/deploy.yml --ask-vault-pass -K
+#   ansible-playbook playbooks/deploy.yml --tags config -e target=device-003 --ask-vault-pass -K
+- name: Deploy the edge agent
+  hosts: "{{ target | default('fleet') }}"
+  serial: "{{ batch | default(1) }}"
+  max_fail_percentage: 0          # stop the rollout on the first failed batch
+  roles:
+    - role: preflight
+      tags: [always]
+    - role: edge_agent

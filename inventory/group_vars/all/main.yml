@@ -1,0 +1,85 @@
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# Fleet-wide defaults. Precedence (low → high):
+#   group_vars/all  <  group_vars/profile_*  <  host_vars/<device>
+# This file is plaintext and committed. Secret VALUES live in the encrypted
+# sibling vault.yml (vault_* names); the mapping lines below expose them under
+# public names, so you can grep which secrets exist without decrypting anything.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Connection ───────────────────────────────────────────────────────────────
+ansible_user: edgeuser
+
+# ── Application ──────────────────────────────────────────────────────────────
+edge_app_name: edge-agent
+edge_service_name: edge-agent.service
+edge_app_root: /opt/edge-agent
+edge_app_user: "{{ ansible_user }}"
+edge_api_url: "https://api.example.com/v1/telemetry"
+
+# Control-node paths to the application package and (optional) model files.
+# The application code itself is not part of this repository.
+edge_agent_source_dir: "{{ playbook_dir }}/../app/edge_agent"
+edge_agent_models_dir: ""          # empty = do not sync models
+
+# ── Board ────────────────────────────────────────────────────────────────────
+# Supported: pi5 (Raspberry Pi 5, RP1 I/O chip) and pi4 (Raspberry Pi 4).
+# Set per device in host_vars when a unit was built on a different board.
+edge_board: pi5
+
+# Board → UART for the serial MCU on GPIO4/5. Same physical pins, different
+# UART unit per SoC. The Pi 5 overlay loads SILENTLY into nothing on a Pi 4 —
+# no boot error, just a missing /dev/ttyAMA2 — so never set these by hand.
+edge_board_profiles:
+  pi5:
+    serial_mcu_overlay: uart2-pi5
+    serial_mcu_port: /dev/ttyAMA2
+  pi4:
+    serial_mcu_overlay: uart3
+    serial_mcu_port: /dev/ttyAMA3
+edge_serial_mcu_overlay: "{{ edge_board_profiles[edge_board].serial_mcu_overlay }}"
+edge_serial_mcu_port: "{{ edge_board_profiles[edge_board].serial_mcu_port }}"
+
+# ── GPIO / bus map (fleet standard) ──────────────────────────────────────────
+edge_button_pin: 19                # override per unit if a GPIO dies
+edge_oled_i2c_address: "0x3C"      # SH1106 128x64 on I2C bus 1
+edge_gps_port: /dev/ttyAMA0        # UART0 on GPIO14/15
+edge_gps_baud: 9600
+edge_serial_mcu_baud: 115200       # MCU on GPIO4/5; port is derived from the board
+edge_serial_mcu_adc_bits: 12       # must match the flashed firmware (12 or 10)
+
+# LoRa SX127x pin map (BCM numbering). RST is not wired on our modules, so it is
+# pointed at a free GPIO.
+edge_lora_pins:
+  DIO0: 22
+  DIO1: 23
+  DIO2: 24
+  DIO3: 25
+  LED: 18
+  SWITCH: 26
+edge_lora_rst_pin: 27
+
+# USB camera fallback indices. At runtime the agent binds cameras by udev
+# ID_PATH (USB port), which survives reboots; these are only the fallback.
+edge_camera_indices: [0]
+
+# ADB bridge: swipe-to-unlock coordinates (x1, y1, x2, y2) in PIXELS of the
+# attached Android device. Measure with `adb shell wm size`; off-screen
+# coordinates fail silently.
+edge_adb_unlock_swipe: [198, 700, 198, 200]
+
+# ── Peripheral feature flags — fail-safe defaults ────────────────────────────
+# All false here; profile_* groups turn on what a device actually has. A device
+# that is in no profile runs nothing rather than probing hardware it lacks.
+edge_enable_cameras: false
+edge_enable_serial_mcu: false
+edge_enable_adb_bridge: false
+edge_enable_lora: false
+edge_enable_gps: false
+edge_enable_oled: false
+
+# ── OS provisioning ──────────────────────────────────────────────────────────
+system_deps_full_upgrade: false
+
+# ── Secret indirection (fleet-wide) ──────────────────────────────────────────
+edge_api_token: "{{ vault_api_token }}"

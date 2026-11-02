@@ -1,0 +1,11 @@
+---
+# Full convergence: validate, provision OS + radio stack, deploy the agent.
+#   ansible-playbook playbooks/site.yml --ask-vault-pass -K
+- name: Preflight
+  ansible.builtin.import_playbook: preflight.yml
+
+- name: Provision
+  ansible.builtin.import_playbook: provision.yml
+
+- name: Deploy
+  ansible.builtin.import_playbook: deploy.yml

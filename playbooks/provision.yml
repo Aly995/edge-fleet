@@ -1,0 +1,18 @@
+---
+# OS packages, buses, UART overlays, Python stack and LoRa radio stack.
+# Safe on a fresh device: skips the live hostname check.
+#   ansible-playbook playbooks/provision.yml -e target=device-005 --ask-vault-pass -K
+- name: Provision edge devices
+  hosts: "{{ target | default('pilot') }}"
+  serial: "{{ batch | default('25%') }}"
+  max_fail_percentage: 10
+  roles:
+    - role: preflight
+      vars:
+        preflight_check_identity: false
+      tags: [always]
+    - role: system_deps
+      tags: [system_deps]
+    - role: lora_stack
+      when: edge_enable_lora | bool
+      tags: [lora]

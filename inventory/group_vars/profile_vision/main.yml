@@ -1,0 +1,9 @@
+---
+# USB cameras + serial MCU. No ADB bridge.
+edge_profile: vision
+edge_enable_cameras: true
+edge_enable_serial_mcu: true
+edge_enable_adb_bridge: false
+edge_enable_lora: true
+edge_enable_gps: true
+edge_enable_oled: true

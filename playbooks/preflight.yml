@@ -1,0 +1,8 @@
+---
+# Validate inventory + identity only. Read-only.
+#   ansible-playbook playbooks/preflight.yml --ask-vault-pass
+- name: Preflight — validate per-device configuration
+  hosts: "{{ target | default('fleet') }}"
+  gather_facts: false
+  roles:
+    - role: preflight

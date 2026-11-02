@@ -1,0 +1,9 @@
+---
+# Every peripheral present.
+edge_profile: full
+edge_enable_cameras: true
+edge_enable_serial_mcu: true
+edge_enable_adb_bridge: true
+edge_enable_lora: true
+edge_enable_gps: true
+edge_enable_oled: true

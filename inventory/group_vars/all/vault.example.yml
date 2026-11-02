@@ -1,0 +1,7 @@
+---
+# Fleet-wide secrets. Copy to vault.yml in this directory, fill in, then encrypt:
+#   ansible-vault encrypt inventory/group_vars/all/vault.yml
+# Check the first line afterwards — it must read `$ANSIBLE_VAULT;1.1;AES256`.
+# A vault.yml that still starts with a comment is plaintext, and
+# --ask-vault-pass will not complain about it.
+vault_api_token: "CHANGE_ME"

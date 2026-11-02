@@ -1,0 +1,4 @@
+---
+edge_agent_package: edge_agent       # Python package name, run as `python3 -m edge_agent.main`
+edge_agent_restart_sec: 5
+edge_agent_verify_import: true       # import the package on the device after deploy

@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  author: bayanatk.com
+  description: OS packages, buses, UART overlays and pinned Python stack for Raspberry Pi
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+dependencies: []

@@ -1,0 +1,14 @@
+# Real inventory and secrets never go into git — only the *.example templates do.
+inventory/inventory.yml
+inventory/host_vars/*/
+inventory/host_vars/*.yml
+!inventory/host_vars/*.example.yml
+inventory/group_vars/all/vault.yml
+*.vault.yml
+.vault_pass*
+
+# Local caches
+.ansible_cache/
+collections/
+*.retry
+__pycache__/

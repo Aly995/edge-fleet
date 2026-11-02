@@ -1,0 +1,39 @@
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# Example inventory. Copy to inventory/inventory.yml (git-ignored) and edit.
+#
+#   fleet            every managed device
+#   ├── profile_full    all peripherals (cameras, serial MCU, ADB, LoRa, GPS, OLED)
+#   ├── profile_vision  USB cameras + serial MCU, no ADB bridge
+#   └── profile_bridge  USB cameras + ADB bridge, no serial MCU
+#   pilot            the device(s) a new release goes to first
+#
+# A device sits in exactly ONE profile_* group; that group sets which peripherals
+# it has. Anything that differs per physical unit (board, GPIO, identity) goes in
+# host_vars/<device>/ instead — supply chains swap parts per unit, not per model.
+#
+# ansible_host can be a LAN IPv4, a DNS name, or a Tailscale MagicDNS name for
+# devices on cellular links. Addresses below are from the documentation range
+# (RFC 5737) and are placeholders.
+# ─────────────────────────────────────────────────────────────────────────────
+all:
+  children:
+    fleet:
+      children:
+        profile_full:
+          hosts:
+            device-001:
+              ansible_host: 192.0.2.11
+            device-002:
+              ansible_host: 192.0.2.12
+        profile_vision:
+          hosts:
+            device-003:
+              ansible_host: 192.0.2.13
+        profile_bridge:
+          hosts:
+            device-004:
+              ansible_host: 192.0.2.14
+    pilot:
+      hosts:
+        device-001:

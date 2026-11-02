@@ -1,0 +1,105 @@
+---
+# preflight — validate every per-device variable BEFORE anything changes on the
+# device. Read-only. Fails loudly and early instead of half-deploying.
+
+- name: Required per-device vars are defined and non-empty
+  ansible.builtin.assert:
+    that:
+      - lookup('vars', item, default='__UNDEF__') != '__UNDEF__'
+      - (lookup('vars', item, default='') | string | length) > 0
+    fail_msg: "{{ inventory_hostname }}: required var '{{ item }}' is missing or empty."
+    quiet: true
+  loop: "{{ preflight_required_vars }}"
+
+- name: Feature flags are booleans (set by the device's profile_* group)
+  ansible.builtin.assert:
+    that:
+      - (lookup('vars', item, default='__UNDEF__') | type_debug) == 'bool'
+    fail_msg: >-
+      {{ inventory_hostname }}: '{{ item }}' must be a boolean — got
+      '{{ lookup('vars', item, default='UNDEFINED') }}'. Is the device in a profile_* group?
+    quiet: true
+  loop: "{{ preflight_feature_flags }}"
+
+- name: Values match their allowed formats
+  ansible.builtin.assert:
+    that:
+      - edge_device_id is match(preflight_device_id_pattern)
+      - edge_board in preflight_allowed_boards
+      - edge_profile in preflight_allowed_profiles
+      - edge_service_name is match('^[a-z0-9-]+[.]service$')
+      - (edge_button_pin | int(-1)) in range(0, 28)
+      - (edge_lora_rst_pin | int(-1)) in range(0, 28)
+      - (edge_serial_mcu_adc_bits | int(0)) in [10, 12]
+      - edge_camera_indices | select('integer') | list | length == edge_camera_indices | length
+    fail_msg: >-
+      {{ inventory_hostname }}: a value failed validation —
+      id='{{ edge_device_id }}', board='{{ edge_board }}', profile='{{ edge_profile }}',
+      service='{{ edge_service_name }}', button={{ edge_button_pin }},
+      lora_rst={{ edge_lora_rst_pin }}, adc_bits={{ edge_serial_mcu_adc_bits }}
+      (must match the flashed MCU firmware), cameras={{ edge_camera_indices }}.
+    quiet: true
+
+- name: Secrets are loaded from the vault
+  ansible.builtin.assert:
+    that:
+      - edge_device_secret is defined
+      - (edge_device_secret | length) > 8
+      - edge_device_secret is not match('CHANGE_ME')
+    fail_msg: >-
+      {{ inventory_hostname }}: device secret missing, too short or still the
+      placeholder. Run with --ask-vault-pass (or --vault-password-file).
+    quiet: true
+  no_log: true
+
+# A host_vars file copied from another device and never edited would make two
+# devices report as one. Secrets are compared as hashes so none reach the log.
+- name: Identity is unique across the fleet
+  when: (groups[preflight_fleet_group] | default([]) | length) > 1
+  vars:
+    preflight_all_ids: >-
+      {{ groups[preflight_fleet_group] | map('extract', hostvars)
+         | map(attribute='edge_device_id', default='__UNDEF__') | list }}
+    preflight_all_secret_hashes: >-
+      {{ groups[preflight_fleet_group] | map('extract', hostvars)
+         | map(attribute='edge_device_secret', default='') | map('hash', 'sha256') | list }}
+  ansible.builtin.assert:
+    that:
+      - (preflight_all_ids | select('equalto', edge_device_id) | list | length) == 1
+      - (preflight_all_secret_hashes | select('equalto', edge_device_secret | hash('sha256')) | list | length) == 1
+    fail_msg: >-
+      {{ inventory_hostname }}: edge_device_id '{{ edge_device_id }}' or its secret is
+      shared with another device. Each unit needs its own pair in host_vars.
+    quiet: true
+  no_log: true
+
+# DHCP leases move. An IP in the inventory can end up on a different device;
+# this proves we are on the right physical unit before touching it.
+- name: Live identity cross-check
+  when: preflight_check_identity | bool
+  block:
+    - name: Read the device's actual hostname and login user
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - hostname
+        - id -un
+      register: preflight_identity
+      changed_when: false
+
+    - name: Hostname and user match the inventory
+      ansible.builtin.assert:
+        that:
+          - (preflight_identity.results[0].stdout | trim) == edge_hostname
+          - (preflight_identity.results[1].stdout | trim) == ansible_user
+        fail_msg: >-
+          WRONG DEVICE at {{ ansible_host }}: it reports
+          hostname='{{ preflight_identity.results[0].stdout | trim }}'
+          user='{{ preflight_identity.results[1].stdout | trim }}', but
+          '{{ inventory_hostname }}' expects '{{ edge_hostname }}' / '{{ ansible_user }}'.
+        quiet: true
+
+- name: Preflight OK
+  ansible.builtin.debug:
+    msg: >-
+      {{ inventory_hostname }}: id={{ edge_device_id }} board={{ edge_board }}
+      profile={{ edge_profile }} service={{ edge_service_name }}

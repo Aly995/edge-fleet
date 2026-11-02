@@ -1,0 +1,106 @@
+---
+# edge_agent — ship the application, render its config, run it under systemd.
+#
+#   --tags code    full deploy: sync package, render config + unit, verify
+#   --tags config  re-render config.py only, restart if it changed
+
+- name: Application directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ edge_app_user }}"
+    group: "{{ edge_app_user }}"
+    mode: "0755"
+  loop:
+    - "{{ edge_app_root }}"
+    - "{{ edge_app_root }}/{{ edge_agent_package }}"
+    - "{{ edge_app_root }}/models"
+    - "{{ edge_app_root }}/logs"
+  become: true
+  tags: [code, config]
+
+# rsync needs SSH key auth: its child ssh does not inherit an --ask-pass password.
+- name: Sync the application package
+  ansible.posix.synchronize:
+    src: "{{ edge_agent_source_dir }}/"
+    dest: "{{ edge_app_root }}/{{ edge_agent_package }}/"
+    delete: false                    # keep files the agent generates at runtime
+    rsync_opts:
+      - --exclude=__pycache__
+      - --exclude=*.pyc
+      - --exclude=logs
+  notify: Restart edge agent
+  tags: [code]
+
+- name: Sync model files
+  ansible.posix.synchronize:
+    src: "{{ edge_agent_models_dir }}/"
+    dest: "{{ edge_app_root }}/models/"
+    delete: false
+  when: edge_agent_models_dir | length > 0
+  notify: Restart edge agent
+  tags: [code]
+
+- name: Render config.py
+  ansible.builtin.template:
+    src: config.py.j2
+    dest: "{{ edge_app_root }}/{{ edge_agent_package }}/config.py"
+    owner: "{{ edge_app_user }}"
+    mode: "0600"                     # contains the device secret
+  become: true
+  notify: Restart edge agent
+  tags: [code, config]
+
+- name: Install the systemd unit
+  ansible.builtin.template:
+    src: edge-agent.service.j2
+    dest: "/etc/systemd/system/{{ edge_service_name }}"
+    mode: "0644"
+  become: true
+  notify: Restart edge agent
+  tags: [code]
+
+- name: Verify — byte-compile the package
+  ansible.builtin.command:
+    cmd: "python3 -m compileall -q {{ edge_agent_package }}"
+    chdir: "{{ edge_app_root }}"
+  changed_when: false
+  tags: [code]
+
+# compileall passes on a broken package layout; only a real import catches a
+# missing subpackage or a bad __init__.py.
+- name: Verify — the import graph resolves
+  ansible.builtin.command:
+    cmd: "python3 -c 'import {{ edge_agent_package }}.main'"
+    chdir: "{{ edge_app_root }}"
+  changed_when: false
+  when: edge_agent_verify_import | bool
+  tags: [code]
+
+- name: Service is enabled and started
+  ansible.builtin.systemd:
+    name: "{{ edge_service_name }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+  tags: [code, config]
+
+- name: Apply pending restarts now
+  ansible.builtin.meta: flush_handlers
+  tags: [code, config]
+
+- name: Read service state
+  ansible.builtin.systemd:
+    name: "{{ edge_service_name }}"
+  register: edge_agent_service
+  become: true
+  tags: [code, config]
+
+- name: Fail loudly if the service is not running
+  ansible.builtin.assert:
+    that: edge_agent_service.status.ActiveState == "active"
+    fail_msg: >-
+      {{ edge_service_name }} is '{{ edge_agent_service.status.ActiveState }}' on
+      {{ inventory_hostname }} — check `journalctl -u {{ edge_service_name }}`.
+  tags: [code, config]

@@ -1,0 +1,17 @@
+# {{ ansible_managed }}
+[Unit]
+Description={{ edge_app_name }} — edge telemetry agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ edge_app_user }}
+WorkingDirectory={{ edge_app_root }}
+# Run as a package from its parent dir so absolute imports resolve.
+ExecStart=/usr/bin/python3 -m {{ edge_agent_package }}.main
+Restart=on-failure
+RestartSec={{ edge_agent_restart_sec }}
+
+[Install]
+WantedBy=multi-user.target

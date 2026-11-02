@@ -1,0 +1,35 @@
+---
+system_deps_full_upgrade: false
+
+system_deps_apt_packages:
+  - i2c-tools
+  - python3-smbus
+  - python3-gpiozero
+  - python3-lgpio
+  - python3-serial
+  - fonts-dejavu-core
+  - libopencv-dev
+  - libcamera-dev
+  - python3-libcamera
+  - libjpeg-dev
+  - libpng-dev
+  - libtiff-dev
+  - adb
+
+# Heavy ML wheels, installed first and PINNED. An unpinned install once pulled a
+# torch aarch64 wheel built for a newer Arm ISA than the Pi 5's Cortex-A76: the
+# service died with SIGILL (status=4/ILL) on the first inference, no traceback.
+system_deps_pip_pinned:
+  - torch==2.6.0
+  - torchvision==0.21.0
+
+system_deps_pip_packages:
+  - ultralytics
+  - luma.oled
+  - gpiozero
+  - pynmea2
+  - pyserial
+  - requests
+
+system_deps_boot_config: /boot/firmware/config.txt
+system_deps_boot_cmdline: /boot/firmware/cmdline.txt

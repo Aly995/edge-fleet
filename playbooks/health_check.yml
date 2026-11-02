@@ -1,0 +1,9 @@
+---
+# Read-only fleet liveness sweep. No sudo, no vault.
+#   ansible-playbook playbooks/health_check.yml
+- name: Fleet health check
+  hosts: "{{ target | default('fleet') }}"
+  gather_facts: true
+  gather_subset: [min]
+  roles:
+    - role: health_check

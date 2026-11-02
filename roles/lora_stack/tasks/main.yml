@@ -1,0 +1,116 @@
+---
+# lora_stack — SX127x LoRa radio on a Raspberry Pi 5 (and Pi 4).
+#
+# The Pi 5 moved GPIO onto the RP1 chip, so the classic RPi.GPIO library no
+# longer works. pyLoRa still imports `RPi.GPIO`, so we install the rpi-lgpio
+# shim, which provides that API on top of lgpio. The shim and python3-rpi.gpio
+# cannot coexist, so the old package is removed first.
+
+- name: Application root exists (holds the board_config backup)
+  ansible.builtin.file:
+    path: "{{ edge_app_root }}"
+    state: directory
+    owner: "{{ edge_app_user }}"
+    group: "{{ edge_app_user }}"
+    mode: "0755"
+  become: true
+
+- name: Remove python3-rpi.gpio (conflicts with rpi-lgpio)
+  ansible.builtin.apt:
+    name: python3-rpi.gpio
+    state: absent
+  become: true
+
+- name: Check for a pip-installed RPi.GPIO
+  ansible.builtin.command: pip3 show RPi.GPIO
+  register: lora_stack_rpigpio
+  changed_when: false
+  failed_when: false
+
+- name: Remove pip-installed RPi.GPIO (does not work on the RP1 chip)
+  ansible.builtin.pip:
+    name: RPi.GPIO
+    state: absent
+    executable: pip3
+    extra_args: --break-system-packages
+  when: lora_stack_rpigpio.rc == 0
+
+- name: Install the rpi-lgpio shim and pyLoRa
+  ansible.builtin.pip:
+    name:
+      - rpi-lgpio
+      - "pyLoRa=={{ lora_stack_pylora_version }}"
+    executable: pip3
+    extra_args: --user --break-system-packages
+
+# board_config.py lives in site-packages and holds the pin map.
+- name: Locate the installed board_config.py
+  ansible.builtin.command:
+    cmd: python3 -c "import SX127x.board_config as b; print(b.__file__)"
+  register: lora_stack_board_config
+  changed_when: false
+
+# board_config.py defines TWO classes, `class BOARD` (the one the library
+# imports) and `class BOARD2`. lineinfile edits the LAST match, which put every
+# pin into the dead BOARD2 — so the edit is bounded to class BOARD with
+# after/before.
+#
+# The `(?m)` is load-bearing: `replace` compiles after/before with re.DOTALL but
+# NOT re.MULTILINE, so a bare '^class BOARD:' only matches at the start of the
+# file and the task reports ok while editing nothing. It must sit only in
+# `after` — inline flags anywhere but position 0 of the combined pattern are an
+# error on Python 3.11+.
+- name: Set the pin map inside class BOARD only
+  ansible.builtin.replace:
+    path: "{{ lora_stack_board_config.stdout }}"
+    after: '(?m)^class BOARD:'
+    before: '^class BOARD2:'
+    regexp: '^\s*{{ item.key }}\s*=.*$'
+    replace: "    {{ item.key }} = {{ item.value }}"
+  loop: "{{ edge_lora_pins | dict2items + [{'key': 'RST', 'value': edge_lora_rst_pin}] }}"
+  loop_control:
+    label: "{{ item.key }} = {{ item.value }}"
+  register: lora_stack_pin_edit
+
+# Catch a silent no-op AT the task that caused it. (Do not assert `changed`
+# per item: SWITCH ships commented out upstream, so it legitimately matches nothing.)
+- name: Fail if the class BOARD section never matched
+  ansible.builtin.assert:
+    that: "'did not match' not in (item.msg | default(''))"
+    fail_msg: >-
+      No 'class BOARD:' … 'class BOARD2:' section matched in
+      {{ lora_stack_board_config.stdout }}; the pin edits did nothing.
+      Module said: {{ item.msg | default('') }}
+    quiet: true
+  loop: "{{ lora_stack_pin_edit.results }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+
+# Prove what the application will actually import, not what the file looks like.
+- name: Read the pin map the library reports
+  ansible.builtin.command:
+    cmd: >-
+      python3 -c "from SX127x.board_config import BOARD;
+      print(BOARD.DIO0, BOARD.DIO1, BOARD.DIO2, BOARD.DIO3, BOARD.LED, BOARD.RST)"
+  register: lora_stack_pin_check
+  changed_when: false
+
+- name: Assert the pin map landed in the class the code imports
+  ansible.builtin.assert:
+    that:
+      - lora_stack_pin_check.stdout.split() | map('int') | list == [
+          edge_lora_pins.DIO0, edge_lora_pins.DIO1, edge_lora_pins.DIO2,
+          edge_lora_pins.DIO3, edge_lora_pins.LED, edge_lora_rst_pin | int ]
+    fail_msg: >-
+      BOARD reports '{{ lora_stack_pin_check.stdout }}'. Upstream defaults
+      ('4 17 18 27 13 22') mean the section never matched; the expected pins
+      showing up only in BOARD2 means a lineinfile-style edit.
+    quiet: true
+
+# pip --force-reinstall wipes site-packages edits; keep a copy to restore from.
+- name: Back up board_config.py
+  ansible.builtin.copy:
+    src: "{{ lora_stack_board_config.stdout }}"
+    dest: "{{ edge_app_root }}/{{ lora_stack_backup_name }}"
+    remote_src: true
+    mode: "0644"

@@ -1,0 +1,31 @@
+---
+# Compare the device's live hostname/user with the inventory. Turn off only for
+# a fresh device whose hostname has not been set yet (provision.yml does).
+preflight_check_identity: true
+
+# Group whose members must all have a unique identity.
+preflight_fleet_group: fleet
+
+# Device ID format: device-001 … device-99999.
+preflight_device_id_pattern: '^device-[0-9]{3,5}$'
+
+preflight_required_vars:
+  - edge_device_id
+  - edge_hostname
+  - edge_service_name
+  - edge_app_root
+  - edge_board
+  - edge_profile
+  - ansible_host
+  - ansible_user
+
+preflight_feature_flags:
+  - edge_enable_cameras
+  - edge_enable_serial_mcu
+  - edge_enable_adb_bridge
+  - edge_enable_lora
+  - edge_enable_gps
+  - edge_enable_oled
+
+preflight_allowed_boards: [pi5, pi4]
+preflight_allowed_profiles: [full, vision, bridge]

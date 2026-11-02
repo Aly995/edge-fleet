@@ -1,0 +1,52 @@
+---
+# health_check — read-only liveness probe from device-local state. Needs no
+# sudo and no vault password; changes nothing.
+
+- name: Query the service state
+  ansible.builtin.systemd:
+    name: "{{ edge_service_name }}"
+  register: health_check_service
+  failed_when: false               # a missing unit must not abort a fleet sweep
+
+- name: Find application logs
+  ansible.builtin.find:
+    paths: "{{ edge_app_root }}/logs"
+    patterns: "{{ health_check_log_pattern }}"
+    file_type: file
+  register: health_check_logs
+
+- name: Stat the offline telemetry queue
+  ansible.builtin.stat:
+    path: "{{ health_check_queue_file }}"
+  register: health_check_queue
+
+# The Pi has no RTC: early-boot log lines can carry a clock that is days off
+# until NTP syncs. Ages here come from the device's current clock.
+- name: Compute log age
+  vars:
+    health_check_newest: "{{ health_check_logs.files | sort(attribute='mtime') | last | default({}) }}"
+  ansible.builtin.set_fact:
+    health_check_log_name: "{{ health_check_newest.path | default('NONE') | basename }}"
+    health_check_log_age: >-
+      {{ (ansible_facts.date_time.epoch | int - health_check_newest.mtime | int)
+         if health_check_newest.mtime is defined else -1 }}
+
+- name: Report device health
+  ansible.builtin.debug:
+    msg:
+      - "device={{ inventory_hostname }} id={{ edge_device_id | default('?') }}"
+      - "service={{ health_check_service.status.ActiveState | default('unknown') }}
+        since={{ health_check_service.status.ActiveEnterTimestamp | default('n/a') }}"
+      - "log={{ health_check_log_name }} age={{ health_check_log_age }}s"
+      - "queue={{ 'present' if health_check_queue.stat.exists else 'empty' }}"
+
+- name: Flag unhealthy devices
+  ansible.builtin.debug:
+    msg: >-
+      WARNING {{ inventory_hostname }}: service is
+      '{{ health_check_service.status.ActiveState | default('unknown') }}' or the newest
+      log is older than {{ health_check_max_log_age_s }}s.
+  when: >-
+    (health_check_service.status.ActiveState | default('unknown')) != 'active'
+    or (health_check_log_age | int) < 0
+    or (health_check_log_age | int) > health_check_max_log_age_s
